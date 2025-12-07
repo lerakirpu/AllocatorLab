@@ -3,9 +3,9 @@
 #include "my_allocator.h"
 #include "my_container.h"
 
-// Функция для вычисления факториала
-long long factorial(int n) {
-    long long result = 1;
+// Функция для вычисления факториала - возвращаем int
+int factorial(int n) {
+    int result = 1;
     for (int i = 2; i <= n; ++i) {
         result *= i;
     }
@@ -14,11 +14,11 @@ long long factorial(int n) {
 
 int main() {
     try {
-        // 1) создание экземпляра std::map<int, int>
-        std::cout << "Стандартный map:\n";
+        // создание экземпляра std::map<int, int>
+        std::cout << "# Стандартный map:\n";
         std::map<int, int> map1;
         
-        // 2) заполнение 10 элементами
+        // заполнение 10 элементами
         for (int i = 0; i < 10; ++i) {
             map1[i] = factorial(i);
         }
@@ -28,12 +28,12 @@ int main() {
             std::cout << key << " " << value << "\n";
         }
         
-        // 3) создание std::map с аллокатором на 10 элементов
+        // создание std::map с аллокатором
         std::cout << "\nСтандартный map с моим аллокатором:\n";
         using MapAllocator = my_allocator<std::pair<const int, int>, 10>;
         std::map<int, int, std::less<int>, MapAllocator> map2;
         
-        // 4) заполнение 10 элементами
+        // заполнение 10 элементами
         for (int i = 0; i < 10; ++i) {
             map2[i] = factorial(i);
         }
@@ -43,11 +43,11 @@ int main() {
             std::cout << key << " " << value << "\n";
         }
         
-        // 6) создание своего контейнера для int
+        // создание своего контейнера для int
         std::cout << "\nМой контейнер со стандартным аллокатором:\n";
         my_container<int> container1;
         
-        // 7) заполнение 10 элементами
+        // заполнение 10 элементами
         for (int i = 0; i < 10; ++i) {
             container1.push_back(i);
         }
@@ -61,16 +61,15 @@ int main() {
         }
         std::cout << "\n";
         
-        // 8) создание своего контейнера с аллокатором на 10 элементов
-        std::cout << "\nМой контейнер с моим аллокатором:\n";
+        // создание своего контейнера с аллокатором 
+        std::cout << "\n# Мой контейнер с моим аллокатором:\n\n";
         my_container<int, my_allocator<int, 10>> container2;
         
-        // 9) заполнение 10 элементами
+        // заполнение 10 элементами
         for (int i = 0; i < 10; ++i) {
             container2.push_back(i);
         }
         
-        // вывод container2
         first = true;
         for (const auto& value : container2) {
             if (!first) std::cout << " ";
