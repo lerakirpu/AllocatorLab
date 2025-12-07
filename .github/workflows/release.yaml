@@ -1,93 +1,88 @@
-name: Build, Test and Release
+name: CI/CD Pipeline
 
 on:
   push:
     branches: [main, master]
-    tags: ['v*']
   pull_request:
     branches: [main, master]
+  # Отдельный триггер для релизов
+  release:
+    types: [created]
 
 env:
-  VERSION: ${{ github.ref_name || '0.0.1' }}
+  VERSION: ${{ github.ref_name || github.event.release.tag_name || '0.0.1' }}
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    
     steps:
     - uses: actions/checkout@v4
     
-    - name: Configure
-      run: cmake -B build
-    
-    - name: Build
-      run: cmake --build build --config Release
-      
-    - name: Test
-      run: .\build\bin\allocator_lab.exe
-      
-    - name: Package Windows release
-      if: success()
+    - name: Build on Linux
+      if: runner.os == 'Linux'
       run: |
-        mkdir -p artifacts/windows
-        copy build\bin\allocator_lab.exe artifacts\windows\allocator_lab-${{ env.VERSION }}-windows.exe
+        sudo apt-get update && sudo apt-get install -y g++ cmake make
+        cmake -B build -DCMAKE_BUILD_TYPE=Release
+        cmake --build build
+        ./build/bin/allocator_lab
         
-    - uses: actions/upload-artifact@v4
-      if: success()
-      with:
-        name: windows-build
-        path: artifacts/windows/
-
-  build-linux:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install dependencies
-      run: sudo apt-get update && sudo apt-get install -y g++ cmake make
-      
-    - name: Configure
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-      
-    - name: Build
-      run: cmake --build build
-      
-    - name: Test
-      run: ./build/bin/allocator_lab
-      
-    - name: Package Linux release
-      if: success()
+    - name: Build on Windows
+      if: runner.os == 'Windows'
       run: |
-        mkdir -p artifacts/linux
-        cp build/bin/allocator_lab artifacts/linux/allocator_lab-${{ env.VERSION }}-linux
+        cmake -B build
+        cmake --build build --config Release
+        .\build\bin\allocator_lab.exe
         
-    - uses: actions/upload-artifact@v4
-      if: success()
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
       with:
-        name: linux-build
-        path: artifacts/linux/
+        name: ${{ runner.os }}-binary
+        path: |
+          build/bin/allocator_lab*
+          build/bin/*/allocator_lab*
 
-  create-release:
-    needs: [build-windows, build-linux]
-    if: startsWith(github.ref, 'refs/tags/v')
+  release:
+    needs: build
+    if: github.event_name == 'release' && github.event.action == 'created'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       
     steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      
-    - name: Prepare release files
-      run: |
-        mkdir -p release
-        cp -r */ release/ 2>/dev/null || true
-        
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
+    - uses: actions/download-artifact@v4
       with:
-        name: "v${{ env.VERSION }}"
-        draft: false
-        prerelease: false
-        generate_release_notes: true
-        files: |
-          release/*
+        path: artifacts
+        
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets
+        # Переименовываем файлы
+        for file in artifacts/*-binary/*; do
+          if [[ "$file" == *"windows"* ]]; then
+            cp "$file" release-assets/allocator_lab-${{ env.VERSION }}-windows.exe
+          elif [[ "$file" == *"ubuntu"* ]]; then
+            cp "$file" release-assets/allocator_lab-${{ env.VERSION }}-linux
+          fi
+        done
+        ls -la release-assets/
+        
+    - name: Upload release assets
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const assets = fs.readdirSync('release-assets');
+          
+          for (const asset of assets) {
+            await github.rest.repos.uploadReleaseAsset({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: context.payload.release.id,
+              name: asset,
+              data: fs.readFileSync(`release-assets/${asset}`)
+            });
+          }
