@@ -1,102 +1,60 @@
-name: Build, Test and Release
+name: Build and Release
 
 on:
   push:
     branches: [main, master]
     tags: ['v*']
-  pull_request:
-    branches: [main, master]
-
-env:
-  VERSION: ${{ github.ref_name || '0.0.1' }}
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Configure
-      run: cmake -B build
-    
-    - name: Build
-      run: cmake --build build --config Release
-      
-    - name: Test
-      run: .\build\bin\allocator_lab.exe
-      
-    - name: Package Windows release
-      if: success()
-      run: |
-        mkdir -p artifacts/windows
-        copy build\bin\allocator_lab.exe artifacts\windows\allocator_lab-${{ env.VERSION }}-windows.exe
-        echo "Version: ${{ env.VERSION }}" > artifacts\windows\VERSION.txt
-        echo "Platform: Windows x64" >> artifacts\windows\VERSION.txt
-        echo "Build date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" >> artifacts\windows\VERSION.txt
-        
-    - uses: actions/upload-artifact@v4
-      if: success()
-      with:
-        name: windows-build
-        path: artifacts/windows/
-        retention-days: 1
-
   build-linux:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     
-    - name: Install dependencies
+    - name: Build for Linux
       run: |
         sudo apt-get update
         sudo apt-get install -y g++ cmake make
-      
-    - name: Configure
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-      
-    - name: Build
-      run: cmake --build build --parallel
-      
-    - name: Test
-      run: ./build/bin/allocator_lab
-      
-    - name: Package Linux release
-      if: success()
-      run: |
-        mkdir -p artifacts/linux
-        cp build/bin/allocator_lab artifacts/linux/allocator_lab-${{ env.VERSION }}-linux
-        strip artifacts/linux/allocator_lab-${{ env.VERSION }}-linux
-        echo "Version: ${{ env.VERSION }}" > artifacts/linux/VERSION.txt
-        echo "Platform: Linux x64" >> artifacts/linux/VERSION.txt
-        echo "Build date: $(date '+%Y-%m-%d %H:%M:%S')" >> artifacts/linux/VERSION.txt
+        cmake -B build -DCMAKE_BUILD_TYPE=Release
+        cmake --build build
+        ./build/bin/allocator_lab
+        cp build/bin/allocator_lab allocator_lab-linux
+        strip allocator_lab-linux
         
     - uses: actions/upload-artifact@v4
-      if: success()
       with:
-        name: linux-build
-        path: artifacts/linux/
-        retention-days: 1
+        name: linux-release
+        path: allocator_lab-linux
 
-  create-release:
-    needs: [build-windows, build-linux]
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Build for Windows
+      run: |
+        cmake -B build
+        cmake --build build --config Release
+        .\build\bin\allocator_lab.exe
+        copy build\bin\allocator_lab.exe allocator_lab-windows.exe
+        
+    - uses: actions/upload-artifact@v4
+      with:
+        name: windows-release
+        path: allocator_lab-windows.exe
+
+  attach-to-release:
+    needs: [build-linux, build-windows]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: write
       
     steps:
-    - name: Download all artifacts
+    - name: Download artifacts
       uses: actions/download-artifact@v4
       
-    - name: List downloaded files
-      run: |
-        echo "Downloaded artifacts:"
-        find . -type f -name "*" | sort
-        echo ""
-        echo "Directory structure:"
-        find . -type f | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
-      
-    - name: Create Release
+    - name: Create Release with Artifacts
       uses: ncipollo/release-action@v1
       with:
         tag: ${{ github.ref_name }}
@@ -104,5 +62,7 @@ jobs:
         draft: false
         prerelease: false
         generateReleaseNotes: true
-        artifacts: "**/*"
+        artifacts: |
+          linux-release/allocator_lab-linux
+          windows-release/allocator_lab-windows.exe
         token: ${{ secrets.GITHUB_TOKEN }}
