@@ -3,7 +3,6 @@
 #include "my_allocator.h"
 #include "my_container.h"
 
-// Функция для вычисления факториала - возвращаем int
 int factorial(int n) {
     int result = 1;
     for (int i = 2; i <= n; ++i) {
@@ -14,8 +13,7 @@ int factorial(int n) {
 
 int main() {
     try {
-        // создание экземпляра std::map<int, int>
-        std::cout << "# Стандартный map:\n";
+        std::cout << "Стандартный map:\n";
         std::map<int, int> map1;
         
         // заполнение 10 элементами
@@ -62,7 +60,7 @@ int main() {
         std::cout << "\n";
         
         // создание своего контейнера с аллокатором 
-        std::cout << "\n# Мой контейнер с моим аллокатором:\n\n";
+        std::cout << "\nМой контейнер с моим аллокатором:\n";
         my_container<int, my_allocator<int, 10>> container2;
         
         // заполнение 10 элементами
